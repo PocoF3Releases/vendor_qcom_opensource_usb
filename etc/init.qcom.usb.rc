@@ -32,7 +32,6 @@
 #
 
 on charger
-    mount configfs none /config
     mkdir /config/usb_gadget/g1 0770
     mkdir /config/usb_gadget/g1/strings/0x409 0770
     write /config/usb_gadget/g1/bcdUSB 0x0200
@@ -50,7 +49,6 @@ on charger
     setprop sys.usb.configfs 1
 
 on zygote-start
-    mount configfs none /config
     chown system usb /config/usb_gadget/
     mkdir /config/usb_gadget/g1 0770 system usb
     chown system usb /config/usb_gadget/g1/UDC
@@ -99,7 +97,6 @@ on zygote-start
     mkdir /config/usb_gadget/g1/functions/gsi.rmnet 0770 system usb
     mkdir /config/usb_gadget/g1/functions/gsi.rndis 0770 system usb
     mkdir /config/usb_gadget/g1/functions/gsi.dpl 0770 system usb
-    mkdir /config/usb_gadget/g1/functions/gsi.ncm 0770 system usb
     mkdir /config/usb_gadget/g1/functions/qdss.qdss 0770 system usb
     mkdir /config/usb_gadget/g1/functions/qdss.qdss_mdm 0770 system usb
     mkdir /config/usb_gadget/g1/functions/qdss.qdss_sw 0770 system usb
@@ -2076,3 +2073,7 @@ on property:vendor.usb.uac2.function.init=1
     chown system usb /config/usb_gadget/g1/functions/uac2.0/c_status
     chown system usb /config/usb_gadget/g1/functions/uac2.0/p_status
     write /config/usb_gadget/g1/functions/uac2.0/c_sync adaptive
+
+# Hardware NCM is not implemented by older GSI gadget drivers.
+on zygote-start && property:vendor.usb.ncm.func.name=gsi
+    mkdir /config/usb_gadget/g1/functions/gsi.ncm 0770 system usb

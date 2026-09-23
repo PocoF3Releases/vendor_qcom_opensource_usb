@@ -25,6 +25,8 @@
 
 #define LOG_TAG "android.hardware.usb.gadget-service.qti"
 
+#include <chrono>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -638,8 +640,17 @@ int main() {
                                        GetProperty(USB_CONTROLLER_PROP, ""));
 
   if (gadgetName.empty()) {
-    ALOGE("UDC name not defined");
-    return -1;
+    // Device init may publish the controller after class hal has started.
+    if (!android::base::WaitForPropertyCreation(USB_CONTROLLER_PROP,
+                                                std::chrono::seconds(10))) {
+      ALOGE("Timed out waiting for UDC name");
+      return -1;
+    }
+    gadgetName = GetProperty(USB_CONTROLLER_PROP, "");
+    if (gadgetName.empty()) {
+      ALOGE("UDC name is empty");
+      return -1;
+    }
   }
 
   ABinderProcess_setThreadPoolMaxThreadCount(0);
