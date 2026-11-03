@@ -104,7 +104,9 @@ static void createCompositionsMap(std::string fileName) {
 }
 
 UsbGadget::UsbGadget(const char *const gadget)
-    : mMonitorFfs(gadget), mGadgetName(gadget), mCurrentUsbFunctionsApplied(false) {
+    : mMonitorFfs(gadget), mGadgetName(gadget),
+      mCurrentUsbFunctions(static_cast<uint64_t>(GadgetFunction::NONE)),
+      mCurrentUsbFunctionsApplied(false) {
   if (access(CONFIG_PATH, R_OK) != 0) ALOGE("configfs setup not done yet");
 
   createCompositionsMap("/vendor/etc/usb_compositions.conf");
