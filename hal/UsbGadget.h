@@ -33,6 +33,7 @@
 #include <aidl/android/hardware/usb/gadget/IUsbGadgetCallback.h>
 
 #include <mutex>
+#include <string>
 
 namespace aidl {
 namespace android {
@@ -75,6 +76,7 @@ struct UsbGadget : public BnUsbGadget {
   int addFunctionsFromPropString(std::string prop, bool &ffsEnabled, int &i);
 
   MonitorFfs mMonitorFfs;
+  const std::string mGadgetName;
 
   // Makes sure that only one request is processed at a time.
   std::mutex mLockSetCurrentFunction;
