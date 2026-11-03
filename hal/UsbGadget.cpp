@@ -25,6 +25,8 @@
 
 #define LOG_TAG "android.hardware.usb.gadget-service.qti"
 
+#include <chrono>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -102,7 +104,9 @@ static void createCompositionsMap(std::string fileName) {
 }
 
 UsbGadget::UsbGadget(const char *const gadget)
-    : mMonitorFfs(gadget), mCurrentUsbFunctionsApplied(false) {
+    : mMonitorFfs(gadget), mGadgetName(gadget),
+      mCurrentUsbFunctions(static_cast<uint64_t>(GadgetFunction::NONE)),
+      mCurrentUsbFunctionsApplied(false) {
   if (access(CONFIG_PATH, R_OK) != 0) ALOGE("configfs setup not done yet");
 
   createCompositionsMap("/vendor/etc/usb_compositions.conf");
@@ -132,9 +136,23 @@ ScopedAStatus UsbGadget::reset(const shared_ptr<IUsbGadgetCallback> &callback,
   if (callback == nullptr)
     return ScopedAStatus::fromExceptionCode(EX_NULL_POINTER);
 
+  std::scoped_lock lock(mLockSetCurrentFunction);
   if (!WriteStringToFile("none", PULLUP_PATH)) {
     ALOGE("reset(): unable to clear pullup");
+    callback->resetCb(Status::ERROR, in_transactionId);
     return ScopedAStatus::fromServiceSpecificError(-1);
+  }
+
+  usleep(kDisconnectWaitUs);
+  if (!WriteStringToFile(mGadgetName, PULLUP_PATH)) {
+    // FunctionFS may already have reconnected the same controller.
+    std::string currentController;
+    if (!ReadFileToString(PULLUP_PATH, &currentController) ||
+        Trim(currentController) != mGadgetName) {
+      ALOGE("reset(): unable to restore pullup");
+      callback->resetCb(Status::ERROR, in_transactionId);
+      return ScopedAStatus::fromServiceSpecificError(-1);
+    }
   }
 
   callback->resetCb(Status::SUCCESS, in_transactionId);
@@ -638,8 +656,17 @@ int main() {
                                        GetProperty(USB_CONTROLLER_PROP, ""));
 
   if (gadgetName.empty()) {
-    ALOGE("UDC name not defined");
-    return -1;
+    // Device init may publish the controller after class hal has started.
+    if (!android::base::WaitForPropertyCreation(USB_CONTROLLER_PROP,
+                                                std::chrono::seconds(10))) {
+      ALOGE("Timed out waiting for UDC name");
+      return -1;
+    }
+    gadgetName = GetProperty(USB_CONTROLLER_PROP, "");
+    if (gadgetName.empty()) {
+      ALOGE("UDC name is empty");
+      return -1;
+    }
   }
 
   ABinderProcess_setThreadPoolMaxThreadCount(0);
