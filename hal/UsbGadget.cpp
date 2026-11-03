@@ -104,7 +104,7 @@ static void createCompositionsMap(std::string fileName) {
 }
 
 UsbGadget::UsbGadget(const char *const gadget)
-    : mMonitorFfs(gadget), mCurrentUsbFunctionsApplied(false) {
+    : mMonitorFfs(gadget), mGadgetName(gadget), mCurrentUsbFunctionsApplied(false) {
   if (access(CONFIG_PATH, R_OK) != 0) ALOGE("configfs setup not done yet");
 
   createCompositionsMap("/vendor/etc/usb_compositions.conf");
@@ -134,9 +134,23 @@ ScopedAStatus UsbGadget::reset(const shared_ptr<IUsbGadgetCallback> &callback,
   if (callback == nullptr)
     return ScopedAStatus::fromExceptionCode(EX_NULL_POINTER);
 
+  std::scoped_lock lock(mLockSetCurrentFunction);
   if (!WriteStringToFile("none", PULLUP_PATH)) {
     ALOGE("reset(): unable to clear pullup");
+    callback->resetCb(Status::ERROR, in_transactionId);
     return ScopedAStatus::fromServiceSpecificError(-1);
+  }
+
+  usleep(kDisconnectWaitUs);
+  if (!WriteStringToFile(mGadgetName, PULLUP_PATH)) {
+    // FunctionFS may already have reconnected the same controller.
+    std::string currentController;
+    if (!ReadFileToString(PULLUP_PATH, &currentController) ||
+        Trim(currentController) != mGadgetName) {
+      ALOGE("reset(): unable to restore pullup");
+      callback->resetCb(Status::ERROR, in_transactionId);
+      return ScopedAStatus::fromServiceSpecificError(-1);
+    }
   }
 
   callback->resetCb(Status::SUCCESS, in_transactionId);
